@@ -1,0 +1,15 @@
+/* File: resources/styles/main_style.css */
+
+QPushButton {
+    border: none;
+    background-color: white;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton:hover {
+    background-color: #e6e6e6;
+}
+QWidget {
+    background-color: #f0f0f0;
+    border-right: 1px solid #dcdcdc;
+}
