@@ -5,8 +5,9 @@ from .students_page import TeacherStudentsPage
 from .tests_page import TeacherTestsPage
 
 class TeacherWindow(QWidget):
-    def __init__(self):
+    def __init__(self, main_window):
         super().__init__()
+        self.main_window =main_window
         self.initUI()
 
     def initUI(self):
@@ -15,7 +16,7 @@ class TeacherWindow(QWidget):
         self.stack.addWidget(TeacherStudentsPage())
         self.stack.addWidget(TeacherTestsPage())
 
-        self.sidebar = SidebarMenu(upper_buttons, self.stack)
+        self.sidebar = SidebarMenu(upper_buttons, self.stack, self.main_window)
 
         layout = QHBoxLayout()
         layout.addWidget(self.sidebar)

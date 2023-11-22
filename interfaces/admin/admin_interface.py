@@ -7,8 +7,9 @@ from .teachers_page import TeachersPage
 from .tests_page import TestsPage
 
 class AdminWindow(QWidget):
-    def __init__(self):
+    def __init__(self, main_window):
         super().__init__()
+        self.main_window = main_window
         self.initUI()
 
     def initUI(self):
@@ -18,9 +19,9 @@ class AdminWindow(QWidget):
         self.stack.addWidget(UsersPage())
         self.stack.addWidget(StudentsPage())
         self.stack.addWidget(TeachersPage())
-        self.stack.addWidget(TestsPage())
+        self.stack.addWidget(TestsPage(self))
 
-        self.sidebar = SidebarMenu(upper_buttons, self.stack)
+        self.sidebar = SidebarMenu(upper_buttons, self.stack, self.main_window)
         
         layout = QHBoxLayout()
         layout.addWidget(self.sidebar)

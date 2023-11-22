@@ -4,8 +4,9 @@ from interfaces.sidebar import SidebarMenu
 from .my_tests_page import MyTestsPage
 
 class StudentWindow(QWidget):
-    def __init__(self):
+    def __init__(self, main_window):
         super().__init__()
+        self.main_window =main_window
         self.initUI()
 
     def initUI(self):
@@ -13,7 +14,7 @@ class StudentWindow(QWidget):
         self.stack = QStackedWidget()
         self.stack.addWidget(MyTestsPage())
 
-        self.sidebar = SidebarMenu(upper_buttons, self.stack)
+        self.sidebar = SidebarMenu(upper_buttons, self.stack, self.main_window)
 
         layout = QHBoxLayout()
         layout.addWidget(self.sidebar)

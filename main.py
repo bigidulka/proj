@@ -8,13 +8,14 @@ from database import setup_database
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.logged_in_user_id = None
         self.central_widget = QStackedWidget()
         self.setCentralWidget(self.central_widget)
 
         self.login_window = LoginWindow(self)
-        self.admin_window = AdminWindow()
-        self.teacher_window = TeacherWindow()
-        self.student_window = StudentWindow()
+        self.admin_window = AdminWindow(self)
+        self.teacher_window = TeacherWindow(self)
+        self.student_window = StudentWindow(self)
 
         self.central_widget.addWidget(self.login_window)
         self.central_widget.addWidget(self.admin_window)

@@ -1,16 +1,28 @@
-# interfaces/admin/users_page.py
-import os
 import sys
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QTableView, QVBoxLayout,
     QMessageBox, QDialog, QLineEdit, QHBoxLayout, QFormLayout,
-    QComboBox, QAbstractItemView, QItemDelegate, QStyle, QStyleOptionButton,
-    QApplication, QHeaderView, QFrame, QStyledItemDelegate, QToolButton, QTextEdit
+    QComboBox, QAbstractItemView, QItemDelegate, QStyledItemDelegate, QTextEdit,  QHeaderView
 )
-from PyQt5.QtCore import Qt, QModelIndex, pyqtSignal, QAbstractTableModel, QEvent, QSize, QSortFilterProxyModel, QRect, QTimer
-from PyQt5.QtGui import QIcon, QFont
-from ..table_models import TableModel
-import database
+from PyQt5.QtCore import Qt, QTimer, QEvent
+from PyQt5.QtGui import QIcon, QStandardItem, QStandardItemModel
+from database import (
+    get_all_users_as_dicts,
+    add_user,
+    delete_user,
+    update_name,
+    update_role,
+)
+
+class CustomStandardItemModel(QStandardItemModel):
+    def __init__(self, rows, columns):
+        super().__init__(rows, columns)
+
+    def flags(self, index):
+        flags = super().flags(index)
+        if index.column() not in [1, 4]:  # Make columns 1 and 4 (Name(Edit) and Role(Edit)) editable
+            flags &= ~Qt.ItemIsEditable
+        return flags
 
 class AddUserDialog(QDialog):
     def __init__(self, parent=None):
@@ -43,8 +55,14 @@ class AddUserDialog(QDialog):
         self.layout.addRow(self.buttons)
 
     def get_inputs(self):
-        return self.name.text(), self.username.text(), self.password.text(), self.role.currentText()
-        
+        # Retrieves the user inputs from the dialog fields
+        return {
+            'name': self.name.text(),
+            'username': self.username.text(),
+            'password': self.password.text(),
+            'role': self.role.currentText()
+        }
+
 class CustomDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -60,11 +78,12 @@ class CustomDelegate(QStyledItemDelegate):
             password = index.data(Qt.DisplayRole)
             show = self.show_password.get(index, False)
             painter.eraseRect(option.rect)
-            if show:
-                painter.drawText(option.rect, Qt.AlignVCenter, password)
-            else:
-                masked_password = '*' * len(password)
-                painter.drawText(option.rect, Qt.AlignVCenter, masked_password)
+            if password is not None:
+                if show:
+                    painter.drawText(option.rect, Qt.AlignVCenter, password)
+                else:
+                    masked_password = '*' * len(password)
+                    painter.drawText(option.rect, Qt.AlignVCenter, masked_password)
             button_rect = option.rect.adjusted(option.rect.width() - 20, 0, 0, 0)
             painter.drawPixmap(button_rect, self.button_icon.pixmap(20, 20))
 
@@ -113,7 +132,7 @@ class CustomDelegate(QStyledItemDelegate):
                 model.setData(index, new_name)
                 username_index = model.index(index.row(), 2)
                 username = model.data(username_index)
-                database.update_name(username, new_name)
+                update_name(username, new_name)
         elif index.column() == 4:  # Column "Role(Edit)"
             new_role = editor.currentText()
             old_role = index.data()
@@ -121,10 +140,10 @@ class CustomDelegate(QStyledItemDelegate):
                 model.setData(index, new_role)
                 username_index = model.index(index.row(), 2)
                 username = model.data(username_index)
-                database.update_role(username, new_role)
+                update_role(username, new_role)
 
         model.dataChanged.emit(index, index)
-    
+
 class UsersPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -133,17 +152,35 @@ class UsersPage(QWidget):
     def initUI(self):
         self.layout = QVBoxLayout(self)
 
-        columns = ["ID", "Name(Edit)", "Username", "Password", "Role(Edit)"]
-        editable_columns = [1, 4]
-        self.users = database.get_all_users()
-
-        self.tableModel = TableModel(columns, self.users, sortable_columns=[0, 4], editable_columns=editable_columns)
-        self.tableView = self.tableModel.create_table_view()
-
-        custom_delegate = CustomDelegate()
-        self.tableView.setItemDelegate(custom_delegate)
-
+        # Create a QTableView
+        self.tableView = QTableView(self)
+        self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.layout.addWidget(self.tableView)
+
+        # Configure the table model and delegate
+        self.header_map = {
+            "ID": "id",
+            "Name(Edit)": "name",
+            "Username": "username",
+            "Password": "password",
+            "Role(Edit)": "role"
+        }
+        self.users = get_all_users_as_dicts()
+        self.tableModel = CustomStandardItemModel(len(self.users), len(self.header_map))
+        self.tableModel.setHorizontalHeaderLabels(self.header_map.keys())
+        self.tableView.setModel(self.tableModel)
+        self.tableView.horizontalHeader().setStretchLastSection(True)
+
+        self.custom_delegate = CustomDelegate()
+        self.tableView.setItemDelegate(self.custom_delegate)
+
+        # Add data to the table model
+        for row, user in enumerate(self.users):
+            for col, field in enumerate(self.header_map.values()):
+                item = QStandardItem(str(user.get(field, "")))
+                if field in ["name", "role"]:
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)  # Make the item editable
+                self.tableModel.setItem(row, col, item)
 
         self.addButton = QPushButton('Add User', self)
         self.addButton.clicked.connect(self.add_user)
@@ -160,30 +197,31 @@ class UsersPage(QWidget):
     def add_user(self):
         dialog = AddUserDialog(self)
         if dialog.exec_() == QDialog.Accepted:
-            name, username, password, role = dialog.get_inputs()
-
-            existing_usernames = [user[2] for user in self.users]  # Извлеките существующие имена пользователей
-
-            if username in existing_usernames:
+            user_data = dialog.get_inputs()
+            if user_data['username'] in [user['username'] for user in self.users]:
                 QMessageBox.warning(self, "Username Exists", "A user with this username already exists.")
             else:
-                # Вместо добавления пользователя в базу данных, добавьте его в модель
-                self.tableModel.add_data((len(self.users) + 1, name, username, password, role))
+                add_user(**user_data)
+                self.refresh_table()
 
     def delete_user(self):
-        selected = self.tableView.selectionModel().selectedRows()
-        if selected:
-            row = selected[0].row()
-            username = self.tableModel.data(self.tableModel.index(row, 2), Qt.DisplayRole)  # Получите имя пользователя из таблицы
+        selected_indexes = self.tableView.selectionModel().selectedRows()
+        if selected_indexes:
+            row = selected_indexes[0].row()
+            username_index = self.tableModel.index(row, 2)
+            username = self.tableModel.data(username_index, Qt.DisplayRole)
 
             reply = QMessageBox.question(self, 'Confirm Deletion', f'Do you want to delete the user with username "{username}"?', QMessageBox.Yes | QMessageBox.No)
             if reply == QMessageBox.Yes:
-                # Вместо удаления пользователя из базы данных, удалите его из модели
-                self.tableModel.remove_data(row)
+                delete_user(username)
+                self.refresh_table()
         else:
             QMessageBox.warning(self, "Warning", "Please select a user to delete.")
 
-
     def refresh_table(self):
-        self.users = database.get_all_users()
-        self.tableModel.load_data(self.users)
+        self.users = get_all_users_as_dicts()
+        self.tableModel.setRowCount(len(self.users))
+        for row, user in enumerate(self.users):
+            for col, field in enumerate(self.header_map.values()):
+                item = QStandardItem(str(user.get(field, "")))
+                self.tableModel.setItem(row, col, item)
