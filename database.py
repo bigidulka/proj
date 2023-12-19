@@ -45,9 +45,9 @@ def setup_database():
             CREATE TABLE IF NOT EXISTS user_groups (
                 user_id INTEGER NOT NULL,
                 group_id INTEGER NOT NULL,
+                PRIMARY KEY(user_id, group_id),
                 FOREIGN KEY(user_id) REFERENCES users(id),
-                FOREIGN KEY(group_id) REFERENCES groups(id),
-                PRIMARY KEY(user_id, group_id)
+                FOREIGN KEY(group_id) REFERENCES groups(id)
             );
         ''')
         
@@ -265,7 +265,6 @@ def authenticate_user(username, password):
 # Functions for managing students
 
 def get_all_students():
-    # Get a list of all students
     conn = create_connection()
     with conn:
         cursor = conn.cursor()
@@ -280,7 +279,6 @@ def get_all_students():
             GROUP BY u.id
         """)
         students = [{"id": row[0], "name": row[1], "username": row[2], "role": row[3], "group": row[4], "tests": row[5]} for row in cursor.fetchall()]
-        print(students) 
         return students
 
 # Functions for managing user data retrieval
@@ -444,14 +442,19 @@ def get_student_group(student_id):
     return execute_query(query, args)
 
 def set_student_group(student_id, group_id):
-    # Assign a student to a group
-    query = """
-    INSERT INTO user_groups (user_id, group_id) VALUES (?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET group_id = excluded.group_id
-    """
-    args = (student_id, group_id)
-    execute_query(query, args)
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        if group_id is None:
+            cursor.execute("DELETE FROM user_groups WHERE user_id = ?", (student_id,))
+        else:
+            cursor.execute("""
+                INSERT INTO user_groups (user_id, group_id) VALUES (?, ?)
+                ON CONFLICT(user_id, group_id) DO UPDATE SET group_id = excluded.group_id
+            """, (student_id, group_id))
+        conn.commit()
 
+    
 def get_all_tests_as_dict():
     # Get a list of all tests as dictionaries
     query = "SELECT id, name FROM tests"
@@ -465,3 +468,10 @@ def assign_test_to_group_students(group_id, test_id):
     """
     args = (test_id, group_id)
     execute_query(query, args)
+    
+def reset_student_group(student_id):
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM user_groups WHERE user_id = ?", (student_id,))
+        conn.commit()

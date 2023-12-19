@@ -3,10 +3,13 @@ from PyQt5.QtWidgets import QWidget, QLabel
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QTableView, 
-    QHBoxLayout, QDialog, QLineEdit, QStyledItemDelegate, QPushButton, QApplication, QStyle, QInputDialog, QMessageBox, QHeaderView, QCheckBox, QComboBox
+    QHBoxLayout, QDialog, QLineEdit, QStyledItemDelegate, QPushButton, QApplication, QStyle, QInputDialog, QMessageBox, QHeaderView, QCheckBox, QComboBox, QStyleOptionComboBox
 )
 from PyQt5.QtCore import Qt, QModelIndex, QRect, pyqtSignal, QAbstractTableModel
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from PyQt5.QtGui import QIcon, QStandardItem, QStandardItemModel
+from PyQt5.QtCore import Qt, QTimer, QEvent
+
 
 import database
             
@@ -33,6 +36,7 @@ class AssignTestToGroupDialog(QDialog):
         test_id = self.testComboBox.currentData()
         database.assign_test_to_group_students(group_id, test_id)
         self.accept()
+
 
 
 class GroupManagementDialog(QDialog):
@@ -120,13 +124,13 @@ class GroupManagementDialog(QDialog):
             self.groupsModel.appendRow(item)
 
 class StudentsTableModel(QAbstractTableModel):
-    def __init__(self, data):
+    def __init__(self, students_data):
         super().__init__()
-        self.data = data
+        self.students_data = students_data  # Переименовали атрибут
         self.header = ["Name", "Group", "Tests"]
 
     def rowCount(self, parent=QModelIndex()):
-        return len(self.data)
+        return len(self.students_data)
 
     def columnCount(self, parent=QModelIndex()):
         return len(self.header)
@@ -137,11 +141,13 @@ class StudentsTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole or role == Qt.EditRole:
             row = index.row()
             col = index.column()
-            student = self.data[row]
-            if col == 1:  # Assuming column 1 is for groups
-                # Use 'group' as the key
-                return student.get('group', 'N/A')  # Using get to avoid KeyError
-            # Handle other columns
+            student = self.students_data[row]  # Используем переименованный атрибут
+            if col == 0:
+                return student['name']
+            elif col == 1:
+                return student['group']
+            elif col == 2:
+                return student['tests']
         return None
     
     def headerData(self, section, orientation, role=Qt.DisplayRole):
@@ -149,13 +155,13 @@ class StudentsTableModel(QAbstractTableModel):
             if orientation == Qt.Horizontal:
                 return self.header[section]
         return None
-    
     def setData(self, index, value, role):
         if role == Qt.EditRole:
-            row = index.row()
-            if index.column() == 1:  # Group assignment
-                student_id = self.data[row]['id']
+            if index.column() == 1:  # Column for group
+                student_id = self.students_data[index.row()]['id']
                 database.set_student_group(student_id, value)
+                self.students_data[index.row()]['group'] = value  # Обновляем данные в модели
+                self.dataChanged.emit(index, index)
                 return True
         return False
     
@@ -184,11 +190,16 @@ class StudentsPage(QWidget):
 
         # Create a table view and set the model
         self.studentsTable = QTableView()
-        self.studentsTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.studentsTable.setItemDelegateForColumn(1, GroupDropdownDelegate(self))
         self.studentsTable.setModel(self.studentsModel)
+        self.studentsTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.studentsTable.setSelectionBehavior(QTableView.SelectRows)
         self.studentsTable.setSelectionMode(QTableView.SingleSelection)
+
+        # Create and set the ComboBox delegate
+        groups = ["Без группы"] + [group['name'] for group in database.get_all_groups()]
+        self.comboBoxDelegate = ComboBoxDelegate(groups, self.studentsTable)
+        self.studentsTable.setItemDelegateForColumn(1, self.comboBoxDelegate)
+
         self.layout.addWidget(self.studentsTable)
 
         self.manageGroupsButton = QPushButton('Manage Groups', self)
@@ -211,40 +222,52 @@ class StudentsPage(QWidget):
         selected = self.studentsTable.selectionModel().selectedRows()
         if selected:
             row = selected[0].row()
-            student_id = self.studentsModel.data[row]['id']
+            student_id = self.studentsModel.students_data[row]['id']
             # Open dialog to assign test
             AssignTestDialog(student_id, self).exec_()
     
 
 
     def refresh_students(self):
-        # Fetch updated students data from the database and update the model
+        # Получаем обновленные данные
         students_data = database.get_all_students()
+        # Обновляем модель
         self.studentsModel = StudentsTableModel(students_data)
         self.studentsTable.setModel(self.studentsModel)
+
         
-class GroupDropdownDelegate(QStyledItemDelegate):
+class ComboBoxDelegate(QStyledItemDelegate):
+    def __init__(self, items, parent=None):
+        super().__init__(parent)
+        self.items = items
+
+    def paint(self, painter, option, index):
+        combo_opt = QStyleOptionComboBox()
+        combo_opt.rect = option.rect
+        combo_opt.currentText = index.data()
+        combo_opt.state = QStyle.State_Enabled
+        QApplication.style().drawComplexControl(QStyle.CC_ComboBox, combo_opt, painter)
+
     def createEditor(self, parent, option, index):
         editor = QComboBox(parent)
-        groups = index.model().get_group_dropdown_data()
-        for group_id, group_name in groups.items():
-            editor.addItem(group_name, group_id)
+        for item in self.items:
+            editor.addItem(item)
         return editor
 
     def setEditorData(self, editor, index):
-        if not index.isValid():
-            return
-
-        # Get the group ID from the model
-        group_id = index.model().data(index, Qt.EditRole)
-
-        # Set the current index of the editor to match the group ID
-        idx = editor.findData(group_id)
+        text = index.model().data(index, Qt.EditRole)
+        idx = editor.findText(text)
         if idx >= 0:
             editor.setCurrentIndex(idx)
 
     def setModelData(self, editor, model, index):
-        model.setData(index, editor.currentData(), Qt.EditRole)
+        text = editor.currentText()
+        if text == "Без группы":
+            group_id = None
+        else:
+            group_id = next((group['id'] for group in database.get_all_groups() if group['name'] == text), None)
+        model.setData(index, group_id, Qt.EditRole)
+
         
 class AssignTestDialog(QDialog):
     def __init__(self, student_id, parent=None):
