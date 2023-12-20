@@ -91,6 +91,16 @@ def setup_database():
             );
         ''')
         
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS group_tests (
+                group_id INTEGER NOT NULL,
+                test_id INTEGER NOT NULL,
+                PRIMARY KEY(group_id, test_id),
+                FOREIGN KEY(group_id) REFERENCES groups(id),
+                FOREIGN KEY(test_id) REFERENCES tests(id)
+            );
+        ''')
+        
         # Insert initial admin, teacher, and student users
         conn.execute("INSERT OR IGNORE INTO users (name, username, password, role) VALUES ('Admin User', 'admin', 'admin', 'ADMIN')")
         conn.execute("INSERT OR IGNORE INTO users (name, username, password, role) VALUES ('Teacher User', 'teacher', 'teacher', 'TEACHER')")
@@ -461,17 +471,58 @@ def get_all_tests_as_dict():
     return execute_query(query)
 
 def assign_test_to_group_students(group_id, test_id):
-    # Assign a test to all students in a group
     query = """
     INSERT INTO student_tests (student_id, test_id)
     SELECT user_id, ? FROM user_groups WHERE group_id = ?
     """
     args = (test_id, group_id)
     execute_query(query, args)
+
     
 def reset_student_group(student_id):
     conn = create_connection()
     with conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM user_groups WHERE user_id = ?", (student_id,))
+        conn.commit()
+        
+def remove_test_from_student(test_id, student_id):
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        query = "DELETE FROM student_tests WHERE student_id = ? AND test_id = ?"
+        args = (student_id, test_id)
+        cursor.execute(query, args)
+        conn.commit()
+        
+def get_group_id_by_name(group_name):
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM groups WHERE name = ?", (group_name,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    
+def assign_test_to_all_students_in_group(test_id, group_id):
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        # Insert a test assignment for each student in the group
+        cursor.execute("""
+            INSERT INTO student_tests (student_id, test_id)
+            SELECT user_id, ? FROM user_groups WHERE group_id = ?
+        """, (test_id, group_id))
+        conn.commit()
+
+def remove_test_assignment_from_group(test_id, group_id):
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        # Delete the test assignment for each student in the group
+        cursor.execute("""
+            DELETE FROM student_tests
+            WHERE test_id = ? AND student_id IN (
+                SELECT user_id FROM user_groups WHERE group_id = ?
+            )
+        """, (test_id, group_id))
         conn.commit()

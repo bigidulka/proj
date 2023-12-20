@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QWidget, QLabel
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QTableView, 
-    QHBoxLayout, QDialog, QLineEdit, QStyledItemDelegate, QPushButton, QApplication, QStyle, QInputDialog, QMessageBox, QHeaderView, QCheckBox, QComboBox, QStyleOptionComboBox
+    QHBoxLayout, QDialog, QLineEdit, QStyledItemDelegate, QPushButton, QApplication, QStyle, QInputDialog, QMessageBox, QStyleOptionButton, QHeaderView, QCheckBox, QComboBox, QStyleOptionComboBox
 )
 from PyQt5.QtCore import Qt, QModelIndex, QRect, pyqtSignal, QAbstractTableModel
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
@@ -12,32 +12,6 @@ from PyQt5.QtCore import Qt, QTimer, QEvent
 
 
 import database
-            
-class AssignTestToGroupDialog(QDialog):
-    def initUI(self):
-        self.layout = QVBoxLayout(self)
-
-        self.groupComboBox = QComboBox(self)
-        for group in database.get_all_groups():
-            self.groupComboBox.addItem(group['name'], group['id'])
-        self.layout.addWidget(self.groupComboBox)
-
-        self.testComboBox = QComboBox(self)
-        for test_id, test_name in database.get_all_tests_as_dict():
-            self.testComboBox.addItem(test_name, test_id)
-        self.layout.addWidget(self.testComboBox)
-
-        self.assignButton = QPushButton('Assign Test to Selected Group', self)
-        self.assignButton.clicked.connect(self.assign_test)
-        self.layout.addWidget(self.assignButton)
-
-    def assign_test(self):
-        group_id = self.groupComboBox.currentData()
-        test_id = self.testComboBox.currentData()
-        database.assign_test_to_group_students(group_id, test_id)
-        self.accept()
-
-
 
 class GroupManagementDialog(QDialog):
     def __init__(self, parent=None):
@@ -107,7 +81,20 @@ class GroupManagementDialog(QDialog):
             self.load_groups()  # Refresh the data after deletion
 
     def assign_test_to_group(self):
-        AssignTestToGroupDialog(self).exec_()
+        selected = self.groupsTable.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, 'No Group Selected', 'Please select a group to assign a test.')
+            return
+
+        row = selected[0].row()
+        group_item = self.groupsModel.item(row)
+        group_name = group_item.text()
+        group_id = database.get_group_id_by_name(group_name)  # Make sure this function exists in your database module
+        if group_id is not None:
+            dialog = AssignTestToGroupDialog(group_id, self)
+            dialog.exec_()
+        else:
+            QMessageBox.warning(self, 'Error', 'Unable to find the selected group in the database.')
 
     def load_groups(self):
         # Fetch updated groups data from the database
@@ -141,11 +128,11 @@ class StudentsTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole or role == Qt.EditRole:
             row = index.row()
             col = index.column()
-            student = self.students_data[row]  # Используем переименованный атрибут
+            student = self.students_data[row]
             if col == 0:
                 return student['name']
             elif col == 1:
-                return student['group']
+                return student['group']  # Убедитесь, что здесь отображается название группы
             elif col == 2:
                 return student['tests']
         return None
@@ -155,12 +142,16 @@ class StudentsTableModel(QAbstractTableModel):
             if orientation == Qt.Horizontal:
                 return self.header[section]
         return None
+    
+
     def setData(self, index, value, role):
-        if role == Qt.EditRole:
-            if index.column() == 1:  # Column for group
+        if role == Qt.EditRole and index.column() == 1:  # Group column
+            dialog = GroupSelectionDialog()
+            if dialog.exec_():
+                selected_group_ids = dialog.selected_groups()
                 student_id = self.students_data[index.row()]['id']
-                database.set_student_group(student_id, value)
-                self.students_data[index.row()]['group'] = value  # Обновляем данные в модели
+                database.set_student_groups(student_id, selected_group_ids)
+                self.students_data[index.row()]['group'] = ','.join([str(group_id) for group_id in selected_group_ids])
                 self.dataChanged.emit(index, index)
                 return True
         return False
@@ -170,9 +161,28 @@ class StudentsTableModel(QAbstractTableModel):
         return {group['id']: group['name'] for group in groups}
     
     def flags(self, index):
-        if index.column() == 1:  # Group column is editable
-            return Qt.ItemIsEditable | super().flags(index)
-        return super().flags(index)
+        if index.column() == 1:  # Для столбца "Group"
+            return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        else:
+            return super().flags(index)
+
+class GroupSelectionDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.initUI()
+
+    def initUI(self):
+        self.layout = QVBoxLayout(self)
+        self.groupComboBox = QComboBox(self)
+        for group in database.get_all_groups():
+            self.groupComboBox.addItem(group['name'], group['id'])
+        self.layout.addWidget(self.groupComboBox)
+        self.assignButton = QPushButton('Assign', self)
+        self.assignButton.clicked.connect(self.accept)
+        self.layout.addWidget(self.assignButton)
+
+    def selected_group_id(self):
+        return self.groupComboBox.currentData()
 
 class StudentsPage(QWidget):
     def __init__(self):
@@ -194,11 +204,13 @@ class StudentsPage(QWidget):
         self.studentsTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.studentsTable.setSelectionBehavior(QTableView.SelectRows)
         self.studentsTable.setSelectionMode(QTableView.SingleSelection)
-
-        # Create and set the ComboBox delegate
-        groups = ["Без группы"] + [group['name'] for group in database.get_all_groups()]
-        self.comboBoxDelegate = ComboBoxDelegate(groups, self.studentsTable)
-        self.studentsTable.setItemDelegateForColumn(1, self.comboBoxDelegate)
+        
+        self.groupDelegate = GroupColumnDelegate(self)
+        self.studentsTable.setItemDelegateForColumn(1, self.groupDelegate)  # Привязка делегата к столбцу "Group"
+        
+        # Связывание сигналов делегата с методами обработки
+        self.groupDelegate.assign_group.connect(self.assign_group)
+        self.groupDelegate.remove_group.connect(self.remove_group)
 
         self.layout.addWidget(self.studentsTable)
 
@@ -226,48 +238,71 @@ class StudentsPage(QWidget):
             # Open dialog to assign test
             AssignTestDialog(student_id, self).exec_()
     
-
-
     def refresh_students(self):
-        # Получаем обновленные данные
-        students_data = database.get_all_students()
-        # Обновляем модель
-        self.studentsModel = StudentsTableModel(students_data)
-        self.studentsTable.setModel(self.studentsModel)
-
+        students_data = database.get_all_students()  # Получение обновленных данных студентов
+        self.studentsModel.students_data = students_data  # Обновление данных в модели
+        self.studentsModel.layoutChanged.emit()  # Сообщение модели о том, что ее содержимое изменилось
+        self.studentsTable.viewport().update()  # Обновление отображения таблицы
         
-class ComboBoxDelegate(QStyledItemDelegate):
-    def __init__(self, items, parent=None):
+    def assign_group(self, row):
+        dialog = GroupSelectionDialog(self)
+        if dialog.exec_():
+            group_id = dialog.selected_group_id()
+            student_id = self.studentsModel.students_data[row]['id']
+            database.set_student_group(student_id, group_id)
+            self.refresh_students()  # Обновление данных студентов и таблицы
+
+    def remove_group(self, row):
+        student_id = self.studentsModel.students_data[row]['id']
+        database.reset_student_group(student_id)
+        self.refresh_students()  # Обновление данных студентов и таблицы
+
+class GroupColumnDelegate(QStyledItemDelegate):
+    assign_group = pyqtSignal(int)  # Сигнал для назначения группы
+    remove_group = pyqtSignal(int)  # Сигнал для удаления группы
+
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.items = items
 
     def paint(self, painter, option, index):
-        combo_opt = QStyleOptionComboBox()
-        combo_opt.rect = option.rect
-        combo_opt.currentText = index.data()
-        combo_opt.state = QStyle.State_Enabled
-        QApplication.style().drawComplexControl(QStyle.CC_ComboBox, combo_opt, painter)
+        # Получение и отображение назначенной группы
+        group_name = index.model().data(index, Qt.DisplayRole)
+        painter.drawText(option.rect.adjusted(5, 0, -30, 0), Qt.AlignVCenter, group_name)  # Отображение названия группы с отступом
 
-    def createEditor(self, parent, option, index):
-        editor = QComboBox(parent)
-        for item in self.items:
-            editor.addItem(item)
-        return editor
+        # Загрузка иконок
+        assign_icon = QIcon("resources/icons/assign.png")
+        remove_icon = QIcon("resources/icons/close.png")
 
-    def setEditorData(self, editor, index):
-        text = index.model().data(index, Qt.EditRole)
-        idx = editor.findText(text)
-        if idx >= 0:
-            editor.setCurrentIndex(idx)
+        # Расчёт положения иконок
+        icon_size = 16
+        right_edge = option.rect.right()
+        remove_icon_rect = QRect(right_edge - icon_size, option.rect.top(), icon_size, icon_size)
+        assign_icon_rect = QRect(right_edge - icon_size * 2 - 5, option.rect.top(), icon_size, icon_size)  # Добавлен отступ между иконками
 
-    def setModelData(self, editor, model, index):
-        text = editor.currentText()
-        if text == "Без группы":
-            group_id = None
-        else:
-            group_id = next((group['id'] for group in database.get_all_groups() if group['name'] == text), None)
-        model.setData(index, group_id, Qt.EditRole)
+        # Отрисовка иконок
+        painter.drawPixmap(assign_icon_rect, assign_icon.pixmap(icon_size, icon_size))
+        painter.drawPixmap(remove_icon_rect, remove_icon.pixmap(icon_size, icon_size))
 
+    def editorEvent(self, event, model, option, index):
+        if not index.isValid():
+            return False
+
+        icon_size = 16
+        right_edge = option.rect.right()
+
+        # Область нажатия для кнопки "Assign"
+        assign_button_rect = QRect(right_edge - icon_size * 2 - 5, option.rect.top(), icon_size, option.rect.height())
+        # Область нажатия для кнопки "Remove"
+        remove_button_rect = QRect(right_edge - icon_size, option.rect.top(), icon_size, option.rect.height())
+
+        if assign_button_rect.contains(event.pos()):
+            self.assign_group.emit(index.row())  # Отправка сигнала с индексом строки
+            return True
+        elif remove_button_rect.contains(event.pos()):
+            self.remove_group.emit(index.row())  # Отправка сигнала с индексом строки
+            return True
+
+        return False
         
 class AssignTestDialog(QDialog):
     def __init__(self, student_id, parent=None):
@@ -299,3 +334,41 @@ class AssignTestDialog(QDialog):
                 elif not widget.isChecked() and widget.test_id in self.assigned_tests:
                     database.remove_test_from_student(widget.test_id, self.student_id)  # Need to write this function
         self.accept()
+        
+class AssignTestToGroupDialog(QDialog):
+    def __init__(self, group_id, parent=None):
+        super().__init__(parent)
+        self.group_id = group_id
+        self.initUI()
+
+    def initUI(self):
+        self.layout = QVBoxLayout(self)
+        self.tests = database.get_all_tests_as_dict()  # This should return a list of tuples
+
+        self.testComboBox = QComboBox(self)
+        for test in self.tests:  # Iterate over the list
+            test_id, test_name = test
+            self.testComboBox.addItem(test_name, test_id)
+        self.layout.addWidget(self.testComboBox)
+
+        self.assignButton = QPushButton('Assign Test to Group', self)
+        self.assignButton.clicked.connect(self.assign_test)
+        self.layout.addWidget(self.assignButton)
+
+        self.removeButton = QPushButton('Remove Test from Group', self)
+        self.removeButton.clicked.connect(self.remove_test)
+        self.layout.addWidget(self.removeButton)
+
+    def assign_test(self):
+        test_id = self.testComboBox.currentData()
+        if test_id:
+            database.assign_test_to_group(test_id, self.group_id)  # Implement this function
+            QMessageBox.information(self, 'Test Assigned', 'Test successfully assigned to the group')
+            self.accept()
+
+    def remove_test(self):
+        test_id = self.testComboBox.currentData()
+        if test_id:
+            database.remove_test_from_group(test_id, self.group_id)  # Implement this function
+            QMessageBox.information(self, 'Test Removed', 'Test successfully removed from the group')
+            self.accept()
