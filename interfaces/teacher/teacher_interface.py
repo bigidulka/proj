@@ -1,8 +1,8 @@
 # interfaces/teacher/teacher_interface.py
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QStackedWidget
 from interfaces.sidebar import SidebarMenu
-from .students_page import TeacherStudentsPage
-from .tests_page import TeacherTestsPage
+from .students_page import StudentsPage
+from .tests_page import TestsPage
 
 class TeacherWindow(QWidget):
     def __init__(self, main_window):
@@ -13,8 +13,9 @@ class TeacherWindow(QWidget):
     def initUI(self):
         upper_buttons = ['Ученики', 'Тесты']
         self.stack = QStackedWidget()
-        self.stack.addWidget(TeacherStudentsPage())
-        self.stack.addWidget(TeacherTestsPage())
+        
+        self.stack.addWidget(StudentsPage(self))
+        self.stack.addWidget(TestsPage(self))
 
         self.sidebar = SidebarMenu(upper_buttons, self.stack, self.main_window)
 

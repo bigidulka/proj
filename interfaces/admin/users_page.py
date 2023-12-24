@@ -27,7 +27,7 @@ class CustomStandardItemModel(QStandardItemModel):
 class AddUserDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Add New User')
+        self.setWindowTitle('Добавить нового пользователя')
         self.layout = QFormLayout(self)
 
         # User input fields
@@ -38,16 +38,16 @@ class AddUserDialog(QDialog):
         self.role = QComboBox(self)
         self.role.addItems(["ADMIN", "TEACHER", "STUDENT"])
 
-        self.layout.addRow('Name:', self.name)
-        self.layout.addRow('Username:', self.username)
-        self.layout.addRow('Password:', self.password)
-        self.layout.addRow('Role:', self.role)
+        self.layout.addRow('ФИО:', self.name)
+        self.layout.addRow('Логин:', self.username)
+        self.layout.addRow('Пароль:', self.password)
+        self.layout.addRow('Роль:', self.role)
 
         # Buttons
         self.buttons = QHBoxLayout()
-        self.addButton = QPushButton('Add', self)
+        self.addButton = QPushButton('Добавить', self)
         self.addButton.clicked.connect(self.accept)
-        self.cancelButton = QPushButton('Cancel', self)
+        self.cancelButton = QPushButton('Отмена', self)
         self.cancelButton.clicked.connect(self.reject)
         self.buttons.addWidget(self.addButton)
         self.buttons.addWidget(self.cancelButton)
@@ -160,10 +160,10 @@ class UsersPage(QWidget):
         # Configure the table model and delegate
         self.header_map = {
             "ID": "id",
-            "Name(Edit)": "name",
-            "Username": "username",
-            "Password": "password",
-            "Role(Edit)": "role"
+            "ФИО (Edit)": "name",
+            "Логин": "username",
+            "Пароль": "password",
+            "Роль (Edit)": "role"
         }
         self.users = get_all_users_as_dicts()
         self.tableModel = CustomStandardItemModel(len(self.users), len(self.header_map))
@@ -182,15 +182,15 @@ class UsersPage(QWidget):
                     item.setFlags(item.flags() | Qt.ItemIsEditable)  # Make the item editable
                 self.tableModel.setItem(row, col, item)
 
-        self.addButton = QPushButton('Add User', self)
+        self.addButton = QPushButton('Добавить пользователя', self)
         self.addButton.clicked.connect(self.add_user)
         self.layout.addWidget(self.addButton)
 
-        self.deleteButton = QPushButton('Delete User', self)
+        self.deleteButton = QPushButton('Удалить пользователя', self)
         self.deleteButton.clicked.connect(self.delete_user)
         self.layout.addWidget(self.deleteButton)
 
-        self.refreshButton = QPushButton('Refresh', self)
+        self.refreshButton = QPushButton('Обновить данные', self)
         self.refreshButton.clicked.connect(self.refresh_table)
         self.layout.addWidget(self.refreshButton)
 
@@ -199,7 +199,7 @@ class UsersPage(QWidget):
         if dialog.exec_() == QDialog.Accepted:
             user_data = dialog.get_inputs()
             if user_data['username'] in [user['username'] for user in self.users]:
-                QMessageBox.warning(self, "Username Exists", "A user with this username already exists.")
+                QMessageBox.warning(self, "Имя пользователя существует", "Пользователь с таким именем пользователя уже существует.")
             else:
                 add_user(**user_data)
                 self.refresh_table()
@@ -211,12 +211,12 @@ class UsersPage(QWidget):
             username_index = self.tableModel.index(row, 2)
             username = self.tableModel.data(username_index, Qt.DisplayRole)
 
-            reply = QMessageBox.question(self, 'Confirm Deletion', f'Do you want to delete the user with username "{username}"?', QMessageBox.Yes | QMessageBox.No)
+            reply = QMessageBox.question(self, 'Подтвердить удаление', f'Вы хотите удалить пользователя с именем пользователя "{username}"?', QMessageBox.Yes | QMessageBox.No)
             if reply == QMessageBox.Yes:
                 delete_user(username)
                 self.refresh_table()
         else:
-            QMessageBox.warning(self, "Warning", "Please select a user to delete.")
+            QMessageBox.warning(self, "Предупреждение", "Пожалуйста, выберите пользователя для удаления.")
 
     def refresh_table(self):
         self.users = get_all_users_as_dicts()

@@ -55,19 +55,11 @@ def setup_database():
             CREATE TABLE IF NOT EXISTS student_tests (
                 student_id INTEGER NOT NULL,
                 test_id INTEGER NOT NULL,
+                assigner_id INTEGER NOT NULL,
                 FOREIGN KEY(student_id) REFERENCES users(id),
                 FOREIGN KEY(test_id) REFERENCES tests(id),
+                FOREIGN KEY(assigner_id) REFERENCES users(id),
                 PRIMARY KEY(student_id, test_id)
-            );
-        ''')
-        
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS teacher_tests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                teacher_id INTEGER NOT NULL,
-                test_id INTEGER NOT NULL,
-                FOREIGN KEY(teacher_id) REFERENCES users(id),
-                FOREIGN KEY(test_id) REFERENCES tests(id)
             );
         ''')
         
@@ -88,16 +80,6 @@ def setup_database():
                 text TEXT NOT NULL,
                 is_correct BOOLEAN NOT NULL,
                 FOREIGN KEY(question_id) REFERENCES questions(id)
-            );
-        ''')
-        
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS group_tests (
-                group_id INTEGER NOT NULL,
-                test_id INTEGER NOT NULL,
-                PRIMARY KEY(group_id, test_id),
-                FOREIGN KEY(group_id) REFERENCES groups(id),
-                FOREIGN KEY(test_id) REFERENCES tests(id)
             );
         ''')
         
@@ -228,24 +210,7 @@ def save_test_to_database(test_name, attempts, questions, creator_id):
 
         conn.commit()
 
-def get_all_tests():
-    query = """
-    SELECT t.id, t.name, t.description, t.total_marks, t.attempts, u.name as created_by
-    FROM tests t
-    LEFT JOIN users u ON t.creator_id = u.id
-    """
-    conn = create_connection()
-    with conn:
-        cursor = conn.cursor()
-        cursor.execute(query)
-        tests = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
-    return tests
 
-def assign_test_to_group(test_id, group_id):
-    # Assign a test to a group
-    query = "INSERT INTO group_tests (group_id, test_id) VALUES (?, ?)"
-    args = (group_id, test_id)
-    execute_query(query, args)
     
 
 def get_tests_for_student(student_id):
@@ -256,12 +221,12 @@ def get_tests_for_student(student_id):
     return [row[0] for row in execute_query(query, args)]
 
 
-def assign_test_to_student(test_id, student_id):
+def assign_test_to_student(test_id, student_id, assigner_id):
     query = """
-    INSERT INTO student_tests (student_id, test_id) VALUES (?, ?)
+    INSERT INTO student_tests (student_id, test_id, assigner_id) VALUES (?, ?, ?)
     ON CONFLICT(student_id, test_id) DO NOTHING
     """
-    args = (student_id, test_id)
+    args = (student_id, test_id, assigner_id)
     execute_query(query, args)
     
 def authenticate_user(username, password):
@@ -309,36 +274,6 @@ def delete_test(test_name):
     query = "DELETE FROM tests WHERE name = ?"
     args = (test_name,)
     execute_query(query, args)
-
-def assign_test_to_teacher(test_id, teacher_id):
-    # Assign a test to a teacher
-    query = "INSERT INTO teacher_tests (test_id, teacher_id) VALUES (?, ?)"
-    args = (test_id, teacher_id)
-    execute_query(query, args)
-
-def get_tests_for_teacher(teacher_id):
-    # Get a list of tests assigned to a teacher
-    query = "SELECT test_id FROM teacher_tests WHERE teacher_id = ?"
-    args = (teacher_id,)
-    return execute_query(query, args)
-
-# Functions for retrieving teachers and their tests
-
-def get_teachers_tests():
-    # Get a list of teachers and their tests
-    query = """
-        SELECT u.name AS teacher_name, IFNULL(t.name, 'N/A') AS test_name
-        FROM users u
-        LEFT JOIN teacher_tests tt ON u.id = tt.teacher_id
-        LEFT JOIN tests t ON tt.test_id = t.id
-        WHERE u.role = 'TEACHER'
-    """
-    conn = create_connection()
-    with conn:
-        cursor = conn.cursor()
-        cursor.execute(query)
-        teachers_tests = [{"teacher_name": row[0], "test_name": row[1]} for row in cursor.fetchall()]
-    return teachers_tests
 
 def get_test_with_questions_and_answers(test_id):
     query = """
@@ -470,13 +405,7 @@ def get_all_tests_as_dict():
     query = "SELECT id, name FROM tests"
     return execute_query(query)
 
-def assign_test_to_group_students(group_id, test_id):
-    query = """
-    INSERT INTO student_tests (student_id, test_id)
-    SELECT user_id, ? FROM user_groups WHERE group_id = ?
-    """
-    args = (test_id, group_id)
-    execute_query(query, args)
+
 
     
 def reset_student_group(student_id):
@@ -515,6 +444,7 @@ def assign_test_to_all_students_in_group(test_id, group_id):
         conn.commit()
 
 def remove_test_assignment_from_group(test_id, group_id):
+    print(test_id, group_id)
     conn = create_connection()
     with conn:
         cursor = conn.cursor()
@@ -526,3 +456,112 @@ def remove_test_assignment_from_group(test_id, group_id):
             )
         """, (test_id, group_id))
         conn.commit()
+
+def assign_test_to_group_students(test_id, group_id, assigner_id):
+    query = """
+    INSERT OR IGNORE INTO student_tests (student_id, test_id, assigner_id)
+    SELECT user_id, ?, ? FROM user_groups WHERE group_id = ?
+    """
+    args = (test_id, assigner_id, group_id)
+    execute_query(query, args)
+
+    
+def get_teachers_tests():
+    # Modified query to fetch all tests created by teachers
+    query = """
+        SELECT u.name AS teacher_name, GROUP_CONCAT(t.name) AS tests
+        FROM users u
+        LEFT JOIN tests t ON u.id = t.creator_id
+        WHERE u.role = 'TEACHER'
+        GROUP BY u.name
+    """
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        teachers_tests = [{"teacher_name": row[0], "tests": row[1]} for row in cursor.fetchall()]
+    return teachers_tests
+
+def get_tests_by_teacher(teacher_name):
+    query = """
+    SELECT t.id, t.name
+    FROM tests t
+    JOIN users u ON t.creator_id = u.id
+    WHERE u.name = ?
+    """
+    args = (teacher_name,)
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(query, args)
+        return [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+    
+def get_tests_by_teacher_id(teacher_id):
+    query = """
+    SELECT t.id, t.name, t.description, t.total_marks, t.attempts, u.name as created_by
+    FROM tests t
+    LEFT JOIN users u ON t.creator_id = u.id
+    WHERE t.creator_id = ?
+    """
+    args = (teacher_id,)
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(query, args)
+        tests = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+    return tests
+
+def get_all_tests():
+    query = """
+    SELECT t.id, t.name, t.description, t.total_marks, t.attempts, u.name as created_by
+    FROM tests t
+    LEFT JOIN users u ON t.creator_id = u.id
+    """
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        tests = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+    return tests
+
+
+def updateTestDescription(test_id, new_description):
+    query = "UPDATE tests SET description = ? WHERE id = ?"
+    args = (new_description, test_id)
+    execute_query(query, args)
+    
+def get_user_info(user_id):
+    query = "SELECT name, username, password FROM users WHERE id = ?"
+    args = (user_id,)
+    conn = create_connection()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(query, args)
+        user_info = cursor.fetchone()
+        return {"name": user_info[0], "username": user_info[1], "password": user_info[2]} if user_info else None
+
+
+def update_user_info(user_id, name, username, password):
+    query = "UPDATE users SET name = ?, username = ?, password = ? WHERE id = ?"
+    args = (name, username, password, user_id)
+    execute_query(query, args)
+    
+def get_assigned_tests_for_student(student_id):
+    query = """
+    SELECT 
+        t.id, t.name, t.description, t.total_marks, t.attempts, 
+        creator.name as creator_name, assigner.name as assigner_name
+    FROM student_tests st
+    JOIN tests t ON st.test_id = t.id
+    LEFT JOIN users creator ON t.creator_id = creator.id
+    LEFT JOIN users assigner ON st.assigner_id = assigner.id
+    WHERE st.student_id = ?
+    """
+    args = (student_id,)
+    conn = create_connection()
+    tests = []
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(query, args)
+        tests = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+    return tests

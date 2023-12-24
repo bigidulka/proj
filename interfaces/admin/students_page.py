@@ -14,8 +14,9 @@ from PyQt5.QtCore import Qt, QTimer, QEvent
 import database
 
 class GroupManagementDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, main_window, parent=None):
         super().__init__(parent)
+        self.main_window = main_window
         self.initUI()
 
     def initUI(self):
@@ -23,7 +24,7 @@ class GroupManagementDialog(QDialog):
 
         # Create a QStandardItemModel for the table
         self.groupsModel = QStandardItemModel()
-        self.groupsModel.setHorizontalHeaderLabels(["Group Name"])
+        self.groupsModel.setHorizontalHeaderLabels(["Имя группы"])
         
         # Table for groups
         self.groupsTable = QTableView(self)
@@ -32,38 +33,38 @@ class GroupManagementDialog(QDialog):
         self.layout.addWidget(self.groupsTable)
 
         # Button for adding a new group
-        self.addGroupButton = QPushButton('Add Group', self)
+        self.addGroupButton = QPushButton('Добавить группу', self)
         self.addGroupButton.clicked.connect(self.add_group)
         self.layout.addWidget(self.addGroupButton)
 
         # Button for deleting a group
-        self.deleteGroupButton = QPushButton('Delete Group', self)
+        self.deleteGroupButton = QPushButton('Удалить группу', self)
         self.deleteGroupButton.clicked.connect(self.delete_group)
         self.layout.addWidget(self.deleteGroupButton)
 
         # Button for assigning a test to a group
-        self.assignTestButton = QPushButton('Assign Test to Group', self)
+        self.assignTestButton = QPushButton('Назначить тест на группу', self)
         self.assignTestButton.clicked.connect(self.assign_test_to_group)
         self.layout.addWidget(self.assignTestButton)
 
         # Button for refreshing data
-        self.refreshButton = QPushButton('Refresh', self)
+        self.refreshButton = QPushButton('Обновить данные', self)
         self.refreshButton.clicked.connect(self.load_groups)
         self.layout.addWidget(self.refreshButton)
 
-        self.setWindowTitle("Manage Groups")
+        self.setWindowTitle("Управление группами")
         self.setGeometry(300, 300, 400, 300)  # Adjust size and position as needed
 
         # Load group data when initializing the dialog
         self.load_groups()
 
     def add_group(self):
-        text, ok = QInputDialog.getText(self, 'Input Dialog', 'Enter group name:')
+        text, ok = QInputDialog.getText(self, 'Добавление группы', 'Введите название группы:')
         if ok and text:
             # Check if the group name already exists
             existing_groups = [item.text() for item in self.groupsModel.findItems(text)]
             if existing_groups:
-                QMessageBox.warning(self, 'Group Already Exists', 'The group already exists.')
+                QMessageBox.warning(self, 'Группа уже существует', 'Группа уже существует.')
             else:
                 # Assuming you have a method in your database module to add a group
                 database.add_group(text)
@@ -83,7 +84,7 @@ class GroupManagementDialog(QDialog):
     def assign_test_to_group(self):
         selected = self.groupsTable.selectionModel().selectedRows()
         if not selected:
-            QMessageBox.warning(self, 'No Group Selected', 'Please select a group to assign a test.')
+            QMessageBox.warning(self, 'Группа не выбрана', 'Пожалуйста, выберите группу, чтобы назначить заданиеst.')
             return
 
         row = selected[0].row()
@@ -91,10 +92,10 @@ class GroupManagementDialog(QDialog):
         group_name = group_item.text()
         group_id = database.get_group_id_by_name(group_name)  # Make sure this function exists in your database module
         if group_id is not None:
-            dialog = AssignTestToGroupDialog(group_id, self)
+            dialog = AssignTestToGroupDialog(group_id, self.main_window.user_id, self)
             dialog.exec_()
         else:
-            QMessageBox.warning(self, 'Error', 'Unable to find the selected group in the database.')
+            QMessageBox.warning(self, 'Ошибка', 'Невозможно найти выбранную группу в базе данных.')
 
     def load_groups(self):
         # Fetch updated groups data from the database
@@ -102,7 +103,7 @@ class GroupManagementDialog(QDialog):
 
         # Clear the existing data in the model
         self.groupsModel.clear()
-        self.groupsModel.setHorizontalHeaderLabels(["Group Name"])
+        self.groupsModel.setHorizontalHeaderLabels(["Имя группы"])
 
         # Add the updated data to the model
         for group in groups:
@@ -114,7 +115,7 @@ class StudentsTableModel(QAbstractTableModel):
     def __init__(self, students_data):
         super().__init__()
         self.students_data = students_data  # Переименовали атрибут
-        self.header = ["Name", "Group", "Tests"]
+        self.header = ["ФИО", "Группа", "Назначенные тесты"]
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.students_data)
@@ -172,21 +173,24 @@ class GroupSelectionDialog(QDialog):
         self.initUI()
 
     def initUI(self):
+        self.setWindowTitle("Выбор группы")  # Устанавливаем заголовок окна
         self.layout = QVBoxLayout(self)
         self.groupComboBox = QComboBox(self)
         for group in database.get_all_groups():
             self.groupComboBox.addItem(group['name'], group['id'])
         self.layout.addWidget(self.groupComboBox)
-        self.assignButton = QPushButton('Assign', self)
+        self.assignButton = QPushButton('Сохранить', self)
         self.assignButton.clicked.connect(self.accept)
         self.layout.addWidget(self.assignButton)
 
     def selected_group_id(self):
         return self.groupComboBox.currentData()
 
+
 class StudentsPage(QWidget):
-    def __init__(self):
+    def __init__(self, main_window):
         super().__init__()
+        self.main_window = main_window
         self.initUI()
 
     def initUI(self):
@@ -214,20 +218,20 @@ class StudentsPage(QWidget):
 
         self.layout.addWidget(self.studentsTable)
 
-        self.manageGroupsButton = QPushButton('Manage Groups', self)
+        self.manageGroupsButton = QPushButton('Управление группами', self)
         self.manageGroupsButton.clicked.connect(self.open_group_management)
         self.layout.addWidget(self.manageGroupsButton)
 
-        self.assignTestStudentButton = QPushButton('Assign Test to Student', self)
+        self.assignTestStudentButton = QPushButton('Назначить тест студенту', self)
         self.assignTestStudentButton.clicked.connect(self.assign_test_to_student)
         self.layout.addWidget(self.assignTestStudentButton)
 
-        self.refreshButton = QPushButton('Refresh', self)
+        self.refreshButton = QPushButton('Обновить данные', self)
         self.refreshButton.clicked.connect(self.refresh_students)
         self.layout.addWidget(self.refreshButton)
 
     def open_group_management(self):
-        dialog = GroupManagementDialog(self)
+        dialog = GroupManagementDialog(self.main_window)
         dialog.exec_()
 
     def assign_test_to_student(self):
@@ -236,7 +240,7 @@ class StudentsPage(QWidget):
             row = selected[0].row()
             student_id = self.studentsModel.students_data[row]['id']
             # Open dialog to assign test
-            AssignTestDialog(student_id, self).exec_()
+            AssignTestDialog(student_id, self.main_window.user_id, self).exec_()
     
     def refresh_students(self):
         students_data = database.get_all_students()  # Получение обновленных данных студентов
@@ -305,10 +309,11 @@ class GroupColumnDelegate(QStyledItemDelegate):
         return False
         
 class AssignTestDialog(QDialog):
-    def __init__(self, student_id, parent=None):
+    def __init__(self, student_id, user_id, parent=None):
         super().__init__(parent)
         self.student_id = student_id
-        self.assigned_tests = set(database.get_tests_for_student(student_id))  # Fetch assigned tests for the student
+        self.user_id = user_id  # Добавляем user_id
+        self.assigned_tests = set(database.get_tests_for_student(student_id)) 
         self.initUI()
 
     def initUI(self):
@@ -321,7 +326,7 @@ class AssignTestDialog(QDialog):
             checkBox.setChecked(test_id in self.assigned_tests)  # Pre-check if test is assigned
             self.layout.addWidget(checkBox)
 
-        self.assignButton = QPushButton('Assign Selected Tests', self)
+        self.assignButton = QPushButton('Сохранить', self)
         self.assignButton.clicked.connect(self.assign_selected_tests)
         self.layout.addWidget(self.assignButton)
 
@@ -330,45 +335,47 @@ class AssignTestDialog(QDialog):
             widget = self.layout.itemAt(i).widget()
             if isinstance(widget, QCheckBox):
                 if widget.isChecked() and widget.test_id not in self.assigned_tests:
-                    database.assign_test_to_student(widget.test_id, self.student_id)
+                    database.assign_test_to_student(widget.test_id, self.student_id, self.user_id)
                 elif not widget.isChecked() and widget.test_id in self.assigned_tests:
                     database.remove_test_from_student(widget.test_id, self.student_id)  # Need to write this function
         self.accept()
         
 class AssignTestToGroupDialog(QDialog):
-    def __init__(self, group_id, parent=None):
+    def __init__(self, group_id, user_id, parent=None):
         super().__init__(parent)
         self.group_id = group_id
+        self.user_id = user_id  # Добавляем user_id
         self.initUI()
 
     def initUI(self):
         self.layout = QVBoxLayout(self)
-        self.tests = database.get_all_tests_as_dict()  # This should return a list of tuples
+        self.tests = database.get_all_tests_as_dict()
 
-        self.testComboBox = QComboBox(self)
-        for test in self.tests:  # Iterate over the list
-            test_id, test_name = test
-            self.testComboBox.addItem(test_name, test_id)
-        self.layout.addWidget(self.testComboBox)
+        self.testCheckBoxes = []
+        for test_id, test_name in self.tests:
+            checkBox = QCheckBox(test_name, self)
+            checkBox.test_id = test_id
+            self.testCheckBoxes.append(checkBox)
+            self.layout.addWidget(checkBox)
 
-        self.assignButton = QPushButton('Assign Test to Group', self)
-        self.assignButton.clicked.connect(self.assign_test)
+        self.assignButton = QPushButton('Назначить выбранные тесты на группу', self)
+        self.assignButton.clicked.connect(self.assign_tests)
         self.layout.addWidget(self.assignButton)
 
-        self.removeButton = QPushButton('Remove Test from Group', self)
-        self.removeButton.clicked.connect(self.remove_test)
+        self.removeButton = QPushButton('Отозвать выбранные тесты на группу', self)
+        self.removeButton.clicked.connect(self.remove_tests)
         self.layout.addWidget(self.removeButton)
 
-    def assign_test(self):
-        test_id = self.testComboBox.currentData()
-        if test_id:
-            database.assign_test_to_group(test_id, self.group_id)  # Implement this function
-            QMessageBox.information(self, 'Test Assigned', 'Test successfully assigned to the group')
-            self.accept()
+    def assign_tests(self):
+        for checkBox in self.testCheckBoxes:
+            if checkBox.isChecked():
+                database.assign_test_to_group_students(checkBox.test_id, self.group_id, self.user_id)
+        QMessageBox.information(self, 'Тесты назначены', 'Выбранные тесты были назначены группе.')
+        self.accept()
 
-    def remove_test(self):
-        test_id = self.testComboBox.currentData()
-        if test_id:
-            database.remove_test_from_group(test_id, self.group_id)  # Implement this function
-            QMessageBox.information(self, 'Test Removed', 'Test successfully removed from the group')
-            self.accept()
+    def remove_tests(self):
+        for checkBox in self.testCheckBoxes:
+            if checkBox.isChecked():
+                database.remove_test_assignment_from_group(checkBox.test_id, self.group_id)
+        QMessageBox.information(self, 'Тесты удалены', 'Выбранные тесты были удалены из группы.')
+        self.accept()

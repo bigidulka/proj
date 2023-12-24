@@ -12,7 +12,7 @@ class StudentWindow(QWidget):
     def initUI(self):
         upper_buttons = ['Мои тесты']
         self.stack = QStackedWidget()
-        self.stack.addWidget(MyTestsPage())
+        self.stack.addWidget(MyTestsPage(self.main_window))
 
         self.sidebar = SidebarMenu(upper_buttons, self.stack, self.main_window)
 

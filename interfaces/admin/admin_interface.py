@@ -17,7 +17,7 @@ class AdminWindow(QWidget):
         self.stack = QStackedWidget()
 
         self.stack.addWidget(UsersPage())
-        self.stack.addWidget(StudentsPage())
+        self.stack.addWidget(StudentsPage(self.main_window))
         self.stack.addWidget(TeachersPage())
         self.stack.addWidget(TestsPage(self))
 

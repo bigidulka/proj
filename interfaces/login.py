@@ -107,16 +107,22 @@ class LoginWindow(QWidget):
         user_info = authenticate_user(username, password)
         if user_info:
             user_id, role = user_info
-            self.main_window.logged_in_user_id = user_id  # Store the user's ID
+            self.main_window.logged_in_user_id = user_id
+            self.main_window.user_role = role
+            self.main_window.user_id = user_id
 
             if role == 'ADMIN':
+                self.main_window.initAdminWindow()
                 self.main_window.central_widget.setCurrentWidget(self.main_window.admin_window)
-            elif role[0] == 'TEACHER':
+            elif role == 'TEACHER':
+                self.main_window.initTeacherWindow()
                 self.main_window.central_widget.setCurrentWidget(self.main_window.teacher_window)
-            elif role[0] == 'STUDENT':
+            elif role == 'STUDENT':
+                self.main_window.initStudentWindow()
                 self.main_window.central_widget.setCurrentWidget(self.main_window.student_window)
         else:
             QMessageBox.warning(self, 'Ошибка', 'Неверный логин или пароль')
+
 
     def register(self):
         name = self.reg_name_input.text().strip()
@@ -141,3 +147,4 @@ class LoginWindow(QWidget):
         add_user(name, username, password, 'STUDENT')
         QMessageBox.information(self, 'Успех', 'Регистрация прошла успешно')
         self.switchToLogin()
+        

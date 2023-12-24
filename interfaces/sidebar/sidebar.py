@@ -35,7 +35,7 @@ class SidebarMenu(QWidget):
         
         self.setLayout(layout)
 
-        self.profile_page = ProfilePage()
+        self.profile_page = ProfilePage(self.main_window)
         self.settings_page = SettingsPage()
         self.stack.addWidget(self.profile_page)
         self.stack.addWidget(self.settings_page)
