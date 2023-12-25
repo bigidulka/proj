@@ -1,15 +1,97 @@
-/* File: resources/styles/main_style.css */
+QLabel {
+  font-size: 16px;
+  color: #333;
+}
+
+QGroupBox {
+  border: 2px solid gray;
+  border-radius: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+* {
+  font-family: Arial;
+  font-size: 14px;
+}
+
+QMainWindow {
+  background-color: #f0f0f0;
+}
 
 QPushButton {
-    border: none;
-    background-color: white;
-    text-align: left;
-    padding-left: 20px;
+  background-color: #4caf50;
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 14px;
+  margin: 4px 2px;
 }
+
 QPushButton:hover {
-    background-color: #e6e6e6;
+  background-color: #45a049;
 }
-QWidget {
-    background-color: #f0f0f0;
-    border-right: 1px solid #dcdcdc;
+
+QTableWidgetItem {
+  padding: 10px;
+}
+
+QLineEdit {
+  border: 2px solid gray;
+  border-radius: 10px;
+  padding: 0 8px;
+  background: white;
+}
+
+QTextEdit {
+  border: 2px solid gray;
+  border-radius: 10px;
+  padding: 0 8px;
+  background: white;
+}
+
+QRadioButton::indicator {
+  width: 16px;
+  height: 16px;
+}
+
+QComboBox {
+  border: 1px solid gray;
+  border-radius: 3px;
+  padding: 1px 18px 1px 3px;
+  min-width: 6em;
+}
+
+QComboBox::drop-down {
+  width: 15px;
+  border-left-width: 1px;
+  border-left-color: darkgray;
+  border-left-style: solid;
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+
+QTextEdit {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #999;
+  border-radius: 5px;
+  padding: 5px;
+}
+
+QTableView {
+  border: 1px solid #d1d1d1;
+}
+
+QHeaderView::section {
+  background-color: #d1d1d1;
+  padding: 5px;
+  border: 1px solid #d1d1d1;
+}
+
+QTableWidgetItem {
+  padding: 10px;
+  border: 1px solid #d1d1d1;
 }

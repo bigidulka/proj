@@ -1,8 +1,14 @@
 # main.py
+
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
 import sys
 from interfaces import LoginWindow, AdminWindow, TeacherWindow, StudentWindow
-from database import setup_database
+import database
+
+
+def load_stylesheet(path):
+    with open(path, "r") as f:
+        return f.read()
 
 
 class MainWindow(QMainWindow):
@@ -14,11 +20,14 @@ class MainWindow(QMainWindow):
         self.central_widget = QStackedWidget()
         self.setCentralWidget(self.central_widget)
 
+        style = load_stylesheet("resources/styles/main_style.css")
+        self.setStyleSheet(style)
+
         self.login_window = LoginWindow(self)
         self.central_widget.addWidget(self.login_window)
 
         self.setGeometry(300, 300, 1024, 768)
-        self.setWindowTitle('Test Management System')
+        self.setWindowTitle("Система управления тестами и результатами")
         self.central_widget.setCurrentWidget(self.login_window)
 
     def initAdminWindow(self):
@@ -34,8 +43,8 @@ class MainWindow(QMainWindow):
         self.central_widget.addWidget(self.student_window)
 
 
-if __name__ == '__main__':
-    setup_database()
+if __name__ == "__main__":
+    database.setup_database()
     app = QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
